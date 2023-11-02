@@ -45,18 +45,26 @@ fn main() {
 
     client.max_size(3000);
 
-    let target_players = try_read_lines("target_players.txt");
-    if target_players.is_some(){
-        println!("Loaded Targeted Players: ");
-            for line in target_players.clone().unwrap(){
-                println!("{}", line);
-            }
-    }
-
     let mut saved_info : Option<Info> = None;
     let mut saved_players : Vec<Player> = Vec::new();
+    let mut saved_targets : Vec<String> = Vec::new();
 
     loop {
+        //Load Targets and save to check for updated file.
+        match try_read_lines("target_players.txt"){
+            Some(e) => {
+                if saved_targets != e {
+                    saved_targets = e;
+                    println!("Loaded Targeted Players:");
+                    for name in &saved_targets{
+                        println!("{}",name)
+                    }
+                }
+            },
+            None => continue,
+        }
+        
+        //Query server info
         match client.info(&addr) {
             Ok(info) => {
                 match args.verbose {
@@ -76,7 +84,8 @@ fn main() {
                 eprintln!("Failed to query server: {}", e);
             }
         }
-        
+
+        //Query player info
         match client.players(&addr) {
             Ok(players) => {
                 match args.verbose {
@@ -88,7 +97,7 @@ fn main() {
                     false => println!("{} : {} : {} Players",Local::now().format("%H:%M:%S"), "Player Query Sucessful".green(), players.len())
                 }
 
-                let events = generate_player_events(&saved_players, &players, &target_players);
+                let events = generate_player_events(&saved_players, &players, &saved_targets);
                 
                 for event in events{
                     match event {
@@ -110,24 +119,20 @@ fn main() {
                 eprintln!("Failed to query player list: {}", e);
             }
         }
-        sleep(Duration::from_secs(10));
+        sleep(Duration::from_secs(3));
     }
 }
 
-fn generate_player_events(previous_players : &Vec<Player>, current_players : &Vec<Player>, target_players: &Option<Vec<String>>) -> Vec<PlayerEvent>{
+fn generate_player_events(previous_players : &Vec<Player>, current_players : &Vec<Player>, target_players: &Vec<String>) -> Vec<PlayerEvent>{
     let mut events : Vec<PlayerEvent> = Vec::new();
 
     let previous_names : Vec<String> = previous_players.iter().map(|player| player.name.clone()).collect();
     let current_names : Vec<String> = current_players.iter().map(|player| player.name.clone()).collect();
 
     for player in current_players {
-        if !previous_names.contains(&&player.name) & !player.name.is_empty() {
-            if let Some(target_players) = target_players {
-                if target_players.contains(&player.name) {
-                    events.push(PlayerEvent::TargetJoined(player.clone()));
-                } else {
-                    events.push(PlayerEvent::PlayerJoined(player.clone()));
-                }
+        if !previous_names.contains(&&player.name) && !player.name.is_empty() {
+            if target_players.contains(&player.name) {
+                events.push(PlayerEvent::TargetJoined(player.clone()));
             } else {
                 events.push(PlayerEvent::PlayerJoined(player.clone()));
             }
