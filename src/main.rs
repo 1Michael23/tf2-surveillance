@@ -10,7 +10,7 @@ use argh::FromArgs;
 #[macro_use]
 extern crate json;
 
-const WEBHOOK_URL: &str = "WEBHOOK GOES HERE";
+const WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1167774134634303570/BsKlnw9B83Ety-aeNuA7bx3s1B78R-eKTQXLN2jplHaWGyR0cdUY98hXSJ5Hqq2p5SBL";
 const AVATAR_URL: &str = "http://images.clipartpanda.com/alarm-clipart-1408568727.png";
 
 #[derive(FromArgs)]
@@ -24,13 +24,26 @@ struct Arguments {
     verbose: bool
 }
 
+enum ServerEvent {
+    MapChange(String),
+    RoundChange(),
+}
+
+enum PlayerEvent {
+    PlayerJoined(Player),
+    PlayerLeft(Player),
+    TargetJoined(Player),
+}
+
 fn main() {
 
     let args: Arguments = argh::from_env();
 
     let addr = SocketAddr::from_str(&args.address).expect("Invalid address");
 
-    let client = A2SClient::new().expect("Failed to create A2S client");
+    let mut client = A2SClient::new().expect("Failed to create A2S client");
+
+    client.max_size(3000);
 
     let target_players = try_read_lines("target_players.txt");
     if target_players.is_some(){
@@ -75,35 +88,62 @@ fn main() {
                     false => println!("{} : {} : {} Players",Local::now().format("%H:%M:%S"), "Player Query Sucessful".green(), players.len())
                 }
 
-                //Alert when a target player joints the server.
-                if let Some(target_players) = &target_players {
-                    for target_name in target_players{
-                        if !(saved_players.iter().any(|saved_player| saved_player.name == *target_name))
-                            && (players.iter().any(|player| player.name == *target_name)){
-                                send_alert(format!("{} detected on ({} : {})",target_name,
-                                            match saved_info {
-                                                Some(ref e) => e.name.clone(),
-                                                None => "Unknown Map".to_string(),
-                                            },
-                                            addr.to_string()
-                                        ));
-                        }
+                let events = generate_player_events(&saved_players, &players, &target_players);
+                
+                for event in events{
+                    match event {
+                        PlayerEvent::PlayerJoined(player) => println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Player Joined".yellow(), player.name),
+                        PlayerEvent::PlayerLeft(player) => println!("{} : {} : {} , Points: {}, Duration: {:?}", Local::now().format("%H:%M:%S"), "Player Left".blue(), player.name, player.score, Duration::from_secs(player.duration as u64)),
+                        PlayerEvent::TargetJoined(player) => {
+                            println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Target Joined".red(), player.name); 
+                            send_alert(format!("__**{}**__ Detected in server ({} : {})", player.name, match &saved_info{
+                                    Some(info) => format!("{} : {}", info.name, info.map),
+                                    None => "Unknown name : Unknown map".to_string(),
+                                }, addr.to_string()))},
                     }
                 }
 
-                saved_players = players.clone();
+                saved_players = players;
                 
             }
             Err(e) => {
                 eprintln!("Failed to query player list: {}", e);
             }
         }
-        sleep(Duration::from_secs(15));
+        sleep(Duration::from_secs(10));
     }
 }
 
+fn generate_player_events(previous_players : &Vec<Player>, current_players : &Vec<Player>, target_players: &Option<Vec<String>>) -> Vec<PlayerEvent>{
+    let mut events : Vec<PlayerEvent> = Vec::new();
+
+    let previous_names : Vec<String> = previous_players.iter().map(|player| player.name.clone()).collect();
+    let current_names : Vec<String> = current_players.iter().map(|player| player.name.clone()).collect();
+
+    for player in current_players {
+        if !previous_names.contains(&&player.name) & !player.name.is_empty() {
+            if let Some(target_players) = target_players {
+                if target_players.contains(&player.name) {
+                    events.push(PlayerEvent::TargetJoined(player.clone()));
+                } else {
+                    events.push(PlayerEvent::PlayerJoined(player.clone()));
+                }
+            } else {
+                events.push(PlayerEvent::PlayerJoined(player.clone()));
+            }
+        }
+    }
+
+    for player in previous_players {
+        if !current_names.contains(&&player.name) & !player.name.is_empty() {
+            events.push(PlayerEvent::PlayerLeft(player.clone()));
+        }
+    }
+
+    return events;
+}
+
 fn send_alert(input_string: String) {
-    println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "ALERT CALLED!!!".red(), input_string);
     let json_request = object! {
         username: "TF2-Alert",
         avatar_url: AVATAR_URL,
