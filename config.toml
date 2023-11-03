@@ -1,0 +1,3 @@
+webhook_url = "WEBHOOK URL HERE"
+webhook_image = "WEBHOOK IMAGE URL HERE"
+refresh_delay = 10

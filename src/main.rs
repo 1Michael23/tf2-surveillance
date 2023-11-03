@@ -1,17 +1,16 @@
 extern crate a2s;
 extern crate chrono;
+extern crate serde;
+extern crate toml;
 
 use chrono::Local;
-use a2s::{info::Info, players::Player, A2SClient};
-use std::{net::SocketAddr, thread::sleep, time::Duration, fs::read_to_string, str::FromStr};
+use a2s::{info::Info, A2SClient};
+use std::{net::SocketAddr, thread::sleep, time::Duration, fs::{self, read_to_string}, str::FromStr, clone};
 use owo_colors::OwoColorize;
 use argh::FromArgs;
 
 #[macro_use]
 extern crate json;
-
-const WEBHOOK_URL: &str = "https://discord.com/api/webhooks/1167774134634303570/BsKlnw9B83Ety-aeNuA7bx3s1B78R-eKTQXLN2jplHaWGyR0cdUY98hXSJ5Hqq2p5SBL";
-const AVATAR_URL: &str = "http://images.clipartpanda.com/alarm-clipart-1408568727.png";
 
 #[derive(FromArgs)]
 ///Scan and report information from a dedicated tf2 server
@@ -24,9 +23,23 @@ struct Arguments {
     verbose: bool
 }
 
-enum ServerEvent {
-    MapChange(String),
-    RoundChange(),
+#[macro_use]
+extern crate serde_derive;
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    webhook_url: String,
+    webhook_image: String,
+    refresh_delay: u64,
+
+}
+#[derive(Debug, Deserialize)]
+
+#[derive(Clone)]
+struct Player {
+    name: String,
+    score: i32,
+    duration: f32,
 }
 
 enum PlayerEvent {
@@ -38,6 +51,10 @@ enum PlayerEvent {
 fn main() {
 
     let args: Arguments = argh::from_env();
+
+    let config = load_config();
+
+    println!("{:?}", config);
 
     let addr = SocketAddr::from_str(&args.address).expect("Invalid address");
 
@@ -87,7 +104,8 @@ fn main() {
 
         //Query player info
         match client.players(&addr) {
-            Ok(players) => {
+            Ok(data) => {
+                let players = a2s_player_parse(&data);
                 match args.verbose {
                     true => {
                         println!("{} : {} : {} Players",Local::now().format("%H:%M:%S"), "Player Query Sucessful".green(), players.len());
@@ -105,7 +123,7 @@ fn main() {
                         PlayerEvent::PlayerLeft(player) => println!("{} : {} : {} , Points: {}, Duration: {:?}", Local::now().format("%H:%M:%S"), "Player Left".blue(), player.name, player.score, Duration::from_secs(player.duration as u64)),
                         PlayerEvent::TargetJoined(player) => {
                             println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Target Joined".red(), player.name); 
-                            send_alert(format!("__**{}**__ Detected in server ({} : {})", player.name, match &saved_info{
+                            send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Detected in server ({} : {})", player.name, match &saved_info{
                                     Some(info) => format!("{} : {}", info.name, info.map),
                                     None => "Unknown name : Unknown map".to_string(),
                                 }, addr.to_string()))},
@@ -119,7 +137,7 @@ fn main() {
                 eprintln!("Failed to query player list: {}", e);
             }
         }
-        sleep(Duration::from_secs(3));
+        sleep(Duration::from_secs(config.refresh_delay));
     }
 }
 
@@ -148,10 +166,10 @@ fn generate_player_events(previous_players : &Vec<Player>, current_players : &Ve
     return events;
 }
 
-fn send_alert(input_string: String) {
+fn send_alert(url: String, image: String, input_string: String) {
     let json_request = object! {
         username: "TF2-Alert",
-        avatar_url: AVATAR_URL,
+        avatar_url: image,
         contents: "ALERT",
         embeds: [
             {
@@ -163,9 +181,8 @@ fn send_alert(input_string: String) {
     };
 
     let json = json_request.dump();
-    let url = WEBHOOK_URL;
 
-    ureq::post(url)
+    ureq::post(&url)
         .set("Content-Type", "application/json")
         .send(json.as_bytes())
         .expect("Failed to post to webhook");
@@ -176,4 +193,17 @@ fn try_read_lines(filename: &str) -> Option<Vec<String>> {
         Ok(data) => Some(data.lines().map(String::from).collect()),
         Err(_) => None,
     } 
+}
+
+fn a2s_player_parse(input: &[a2s::players::Player]) -> Vec<Player> {
+    input.iter().map(|player| Player {
+        name: player.name.clone(),
+        score: player.score,
+        duration: player.duration,
+    }).collect()
+}
+
+fn load_config() -> Config {
+    let contents = fs::read_to_string("config.toml").expect("Failed to read configuration file");
+    toml::from_str(&contents).expect("Failed to parse configuration file")
 }
