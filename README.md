@@ -2,6 +2,13 @@
 
 An advanced data logging software to track players across Source game servers and collect statistics.
 
+## Features
+
+- Multithreaded scanning.
+- Trigger webhook on target join.
+- Extensive logging of all player sessions, join/leave times, and server activity.
+- Jupyter Notebook for database reads and data search/analysis.
+
 ## Installation
 
 1. Install `dbrowser` for SQLite and create a database.
