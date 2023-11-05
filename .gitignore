@@ -21,3 +21,4 @@ target_players.txt
 plan.md
 *.txt
 config.toml
+players.db
