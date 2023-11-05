@@ -16,7 +16,7 @@ def extract_addresses(input_file, output_file):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python script.py <input_file> <output_file>")
+        print("Usage: python blacklist_extract.py <input_file> <output_file>")
         sys.exit(1)
     input_file = sys.argv[1]
     output_file = sys.argv[2]

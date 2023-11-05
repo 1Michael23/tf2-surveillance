@@ -24,6 +24,19 @@ Options:
   --help                 Display usage information
 ```
 
+#### blacklist_extract.py
+
+To get the ip addresses of many servers at once with the community browser tab, blacklist any server you want to target, then find the text file server_blacklist.txt, located in tf/cfg in the game files.
+```plaintext
+Usage: python blacklist_extract.py <input_file> <output_file>
+```
+
+#### analysis.ipynb
+
+This is the jupyter notebook where the database is read and analysied, modules like seaborn and mathplotlib can be used for advanced insights.
+
+A simple example of loading a players session history by name is included.
+
 ## Configuration
 
 Settings found in config.toml
