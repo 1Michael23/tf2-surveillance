@@ -1,3 +1,4 @@
-webhook_url = "WEBHOOK URL HERE"
-webhook_image = "WEBHOOK IMAGE URL HERE"
-refresh_delay = 10
+webhook_url = "webhook link goes here"
+webhook_image = "http://images.clipartpanda.com/alarm-clipart-1408568727.png"
+refresh_delay = 5
+database_file = "players.db"

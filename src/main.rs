@@ -46,6 +46,7 @@ struct Config {
     webhook_url: String,
     webhook_image: String,
     refresh_delay: u64,
+    database_file: String,
 }
 
 #[derive(Clone)]
@@ -64,10 +65,10 @@ enum PlayerEvent {
 
 fn main() {
 
-    let connection = Connection::open("players.db").unwrap();
-
     let args: Arguments = argh::from_env();
     let config = load_config();
+
+    let connection = Connection::open(config.database_file).unwrap();
 
     let saved_info = Arc::new(RwLock::new(HashMap::new()));
     let saved_players = Arc::new(RwLock::new(HashMap::new()));
@@ -95,6 +96,8 @@ fn main() {
             },
             None => continue,
         }
+
+        let scan = Instant::now();
 
         let sucessful = AtomicUsize::new(0);
         let failed = AtomicUsize::new(0);
@@ -170,7 +173,7 @@ fn main() {
             });
         });
 
-        let now = Instant::now();
+        let db = Instant::now();
 
         for server in saved_info.read().unwrap().iter(){
             sql::insert_server(&connection, &sql::Server { server_id: 0, address: server.0.to_string(), name: server.1.name.clone(), max_players: server.1.max_players as i32 }).unwrap();
@@ -247,7 +250,7 @@ fn main() {
             
         }
 
-        println!("{} : {} : Events({}) Players({}) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed).green(), failed.fetch_or(0, Ordering::Relaxed).red()), event_count.fetch_or(0, Ordering::Relaxed).blue(), players_under_my_domain.fetch_or(0, Ordering::Relaxed), now.elapsed().as_millis());
+        println!("{} : {} : Events({}) Players({}) scan({}s) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed).green(), failed.fetch_or(0, Ordering::Relaxed).red()), event_count.fetch_or(0, Ordering::Relaxed).blue(), players_under_my_domain.fetch_or(0, Ordering::Relaxed), scan.elapsed().as_secs(), db.elapsed().as_millis());
         sleep(Duration::from_secs(config.refresh_delay));
     };
 }
