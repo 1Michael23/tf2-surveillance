@@ -22,3 +22,4 @@ plan.md
 *.txt
 config.toml
 players.db
+players.db-journal
