@@ -8,8 +8,19 @@ use chrono::NaiveDateTime;
 pub struct Server {
     pub server_id: i32,
     pub address: String,
+}
+
+#[derive(Debug)]
+pub struct ServerSettings {
+    pub setting_id: i32,
+    pub server_id: i32,
     pub name: String,
     pub max_players: i32,
+    pub current_map: String,
+    pub vac_status: bool,
+    pub has_password: bool,
+    pub game_version: String,
+    pub bots: u8,
 }
 
 #[derive(Debug)]
@@ -44,13 +55,14 @@ pub struct PlayerEvent {
     pub server_id: i32,
     pub player_id: i32,
     pub event_type: String,
+    pub event_data: String, 
     pub created_at: NaiveDateTime,
 }
 
 pub fn insert_server(conn: &Connection, server: &Server) -> Result<usize> {
     conn.execute(
-        "INSERT or IGNORE INTO servers (address, name, max_players) VALUES (?1, ?2, ?3)",
-        params![&server.address, &server.name, server.max_players],
+        "INSERT or IGNORE INTO servers (address) VALUES (?1)",
+        params![&server.address,],
     )
 }
 
@@ -70,12 +82,46 @@ pub fn get_server_by_addr(conn: &Connection, address: String) -> Result<Server> 
     )
 }
 
+pub fn insert_server_settings(conn: &Connection, settings: &ServerSettings) -> Result<usize> {
+    conn.execute(
+        "INSERT INTO server_settings (server_id, name, max_players, current_map, vac_status, has_password, game_version, bots) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            settings.server_id,
+            &settings.name,
+            settings.max_players,
+            &settings.current_map,
+            settings.vac_status,
+            settings.has_password,
+            &settings.game_version,
+            settings.bots,
+        ],
+    )
+}
+
+pub fn _get_server_settings(conn: &Connection, server_id: i32) -> Result<ServerSettings> {
+    conn.query_row(
+        "SELECT * FROM server_settings WHERE server_id = ?1 ORDER BY updated_at DESC LIMIT 1",
+        params![server_id],
+        |row| {
+            Ok(ServerSettings {
+                setting_id: row.get(0)?,
+                server_id: row.get(1)?,
+                name: row.get(2)?,
+                max_players: row.get(3)?,
+                current_map: row.get(4)?,
+                vac_status: row.get(5)?,
+                has_password: row.get(6)?,
+                game_version: row.get(7)?,
+                bots: row.get(8)?,
+            })
+        },
+    )
+}
+
 fn map_to_server(row: &Row) -> Server {
     Server {
         server_id: row.get(0).unwrap(),
         address: row.get(1).unwrap(),
-        name: row.get(2).unwrap(),
-        max_players: row.get(3).unwrap(),
     }
 }
 
@@ -136,7 +182,7 @@ pub fn _get_session(conn: &Connection, session_id: i32) -> Result<Session> {
     )
 }
 
-pub fn _insert_server_event(conn: &Connection, event: &ServerEvent) -> Result<()> {
+pub fn insert_server_event(conn: &Connection, event: &ServerEvent) -> Result<()> {
     conn.execute(
         "INSERT INTO server_events (server_id, event_type, event_data, created_at) VALUES (?1, ?2, ?3, ?4)",
         params![event.server_id, &event.event_type, &event.event_data, event.created_at.format("%Y-%m-%d %H:%M:%S").to_string()],
@@ -162,8 +208,8 @@ pub fn _get_server_event(conn: &Connection, event_id: i32) -> Result<ServerEvent
 
 pub fn insert_player_event(conn: &Connection, event: &PlayerEvent) -> Result<()> {
     conn.execute(
-        "INSERT INTO player_events (server_id, player_id, event_type, created_at) VALUES (?1, ?2, ?3, ?4)",
-        params![event.server_id, event.player_id, &event.event_type, event.created_at.format("%Y-%m-%d %H:%M:%S").to_string()],
+        "INSERT INTO player_events (server_id, player_id, event_type, event_data, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![event.server_id, event.player_id, &event.event_type, event.event_data, event.created_at.format("%Y-%m-%d %H:%M:%S").to_string()],
     )?;
     Ok(())
 }
@@ -178,7 +224,8 @@ pub fn _get_player_event(conn: &Connection, event_id: i32) -> Result<PlayerEvent
                 server_id: row.get(1)?,
                 player_id: row.get(2)?,
                 event_type: row.get(3)?,
-                created_at: NaiveDateTime::parse_from_str(&row.get::<_, String>(4).unwrap(), "%Y-%m-%d %H:%M:%S").unwrap(),
+                event_data: row.get(4)?,
+                created_at: NaiveDateTime::parse_from_str(&row.get::<_, String>(5).unwrap(), "%Y-%m-%d %H:%M:%S").unwrap(),
             })
         },
     )

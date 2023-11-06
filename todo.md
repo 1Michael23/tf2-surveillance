@@ -8,3 +8,5 @@
 # Issues
 
 - fix join logs when program restarted
+- recover from failed discord alert
+- 

@@ -56,11 +56,19 @@ struct Player {
     duration: f32,
 }
 
+#[derive(Debug)]
+enum ServerEvent {
+    ServerUp(String),
+    ServerDown(String),
+    SettingsChange(String, Info)
+}
+
 enum PlayerEvent {
     PlayerJoined(Player),
     PlayerLeft(Player),
     TargetJoined(Player),
-    TargetLeft(Player,)
+    TargetLeft(Player),
+    PointUpdate(Player, usize)
 }
 
 fn main() {
@@ -70,10 +78,12 @@ fn main() {
 
     let connection = Connection::open(config.database_file).unwrap();
 
-    let saved_info = Arc::new(RwLock::new(HashMap::new()));
+    let saved_info: Arc<RwLock<HashMap<SocketAddr, Info>>> = Arc::new(RwLock::new(HashMap::new()));
     let saved_players = Arc::new(RwLock::new(HashMap::new()));
-    let saved_events = Arc::new(RwLock::new(HashMap::new()));
+    let saved_player_events = Arc::new(RwLock::new(HashMap::new()));
+    let saved_server_events: Arc<RwLock<HashMap<SocketAddr, Vec<ServerEvent>>>> = Arc::new(RwLock::new(HashMap::new()));
     let mut saved_targets : Vec<String> = Vec::new();
+
     let target_server_addresses : Vec<SocketAddr> = try_read_lines(&args.target_server_file)
         .expect("Failed to read target server file").iter()
         .filter_map(|address| address.parse().ok())
@@ -111,13 +121,42 @@ fn main() {
                 client.max_size(3000);
 
                 let mut current_info: Option<Info> = None;
+                let mut server_events: Vec<ServerEvent> = Vec::new();
+                
                 match client.info(server) {
                     Ok(info) => {
+                        //Check if any server settings have changed
                         current_info = Some(info.clone());
+
+                        let saved_info_read = saved_info.read().unwrap().clone();
+                        match saved_info_read.get(server){
+                            Some(previous) => {
+                                if info.name == previous.name && info.vac == previous.vac && info.visibility == previous.visibility && info.bots == previous.bots && info.map == previous.map && info.max_players == previous.max_players{
+                                }else {
+                                    server_events.push(ServerEvent::SettingsChange(server.to_string(), info.clone()));
+                                }
+                            },
+                            None => {
+                                server_events.push(ServerEvent::SettingsChange(server.to_string(), info.clone()));
+                            },
+                        };
+
+                        server_events.push(ServerEvent::ServerUp(server.to_string()));
+                        
                         let mut saved_info_write = saved_info.write().unwrap();
                         saved_info_write.insert(*server, info.clone());
                     },
-                    Err(error) => if args.verbose {eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Server Query Failed".red(),server.to_string(), error)},
+                    Err(error) => {
+                        server_events.push(ServerEvent::ServerDown(server.to_string()));
+                        if args.verbose {
+                            eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Server Query Failed".red(),server.to_string(), error);    
+                        }
+                    }
+                }
+
+                {
+                    let mut server_events_write = saved_server_events.write().unwrap();
+                    server_events_write.insert(*server, server_events);
                 }
 
                 let previous_players: Vec<Player>;
@@ -148,8 +187,11 @@ fn main() {
                                                 Some(info) => format!("{} : {}", info.name, info.map),
                                                 None => "Unknown name : Unknown map".to_string(),
                                             }, server.to_string(), player.score, format_duration(player.duration as usize)), "🦀🦀🦀 Runner.".to_string(),22230)}}
-                                };
-                            }
+                                PlayerEvent::PointUpdate(Player, total) => {
+                                    //do nothing
+                                }
+                            };
+                        }
                         
                         sucessful.fetch_add(1, Ordering::Relaxed);
                         players_under_my_domain.fetch_add(players.len(), Ordering::Relaxed);
@@ -158,7 +200,7 @@ fn main() {
                             saved_players_write.insert(*server, players);
                         }
                         {
-                            let mut saved_events_write = saved_events.write().unwrap();
+                            let mut saved_events_write = saved_player_events.write().unwrap();
                             saved_events_write.insert(*server, events);
                         }
                     },
@@ -175,8 +217,35 @@ fn main() {
 
         let db = Instant::now();
 
-        for server in saved_info.read().unwrap().iter(){
-            sql::insert_server(&connection, &sql::Server { server_id: 0, address: server.0.to_string(), name: server.1.name.clone(), max_players: server.1.max_players as i32 }).unwrap();
+        for address in target_server_addresses.clone(){
+            sql::insert_server(&connection, &sql::Server { server_id: 0, address: address.to_string() }).unwrap();
+        }
+
+        for server_events in saved_server_events.read().unwrap().iter(){
+            let server_id = sql::get_server_by_addr(&connection, server_events.0.to_string()).unwrap();
+            for event in server_events.1{
+                match event {
+                    ServerEvent::ServerUp(address) => {
+                        sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
+                    },
+                    ServerEvent::ServerDown(address) => {
+                        sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
+                    },
+                    ServerEvent::SettingsChange(address, info) => {                
+                        sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "setting change".to_string(), event_data: info.map.to_string(), created_at: Local::now().naive_local() }).unwrap();
+                        sql::insert_server_settings(&connection, &sql::ServerSettings { 
+                            setting_id: 0, 
+                            server_id: server_id.server_id, 
+                            name: info.name.to_string(), 
+                            max_players: info.max_players as i32, 
+                            current_map: info.map.to_string(), 
+                            vac_status: info.vac, 
+                            has_password: info.visibility, 
+                            game_version: info.version.to_string(), 
+                            bots: info.bots }).unwrap();
+                    },
+                }
+            }
         }
 
         for server_players in saved_players.read().unwrap().iter(){
@@ -185,11 +254,10 @@ fn main() {
             }
         }
 
-        for server_events in saved_events.read().unwrap().iter(){
-
-            match sql::get_server_by_addr(&connection, server_events.0.to_string()){
+        for player_events in saved_player_events.read().unwrap().iter(){
+            match sql::get_server_by_addr(&connection, player_events.0.to_string()){
                 Ok(server) => {
-                    for event in server_events.1 {   
+                    for event in player_events.1 {   
                         match event {
                             PlayerEvent::PlayerJoined(player) => {
                                 sql::insert_player_event(&connection, &sql::PlayerEvent { 
@@ -197,7 +265,8 @@ fn main() {
                                     server_id: server.server_id, 
                                     player_id: sql::get_player_by_name(&connection, player.name.clone()).unwrap().player_id, 
                                     event_type: "join".to_string(), 
-                                    created_at: Local::now().naive_local()}).unwrap()
+                                    created_at: Local::now().naive_local(),
+                                    event_data: "".to_string(), }).unwrap()
                             },
                             PlayerEvent::PlayerLeft(player) => {
                                 sql::insert_session(&connection, &sql::Session { 
@@ -214,7 +283,8 @@ fn main() {
                                     server_id: server.server_id, 
                                     player_id: sql::get_player_by_name(&connection, player.name.clone()).unwrap().player_id, 
                                     event_type: "leave".to_string(), 
-                                    created_at: Local::now().naive_local()}).unwrap()
+                                    created_at: Local::now().naive_local(),
+                                    event_data: "".to_string(), }).unwrap()
                             },
                             PlayerEvent::TargetJoined(player) => {
                                 sql::insert_player_event(&connection, &sql::PlayerEvent { 
@@ -222,7 +292,8 @@ fn main() {
                                     server_id: server.server_id, 
                                     player_id: sql::get_player_by_name(&connection, player.name.clone()).unwrap().player_id, 
                                     event_type: "target join".to_string(), 
-                                    created_at: Local::now().naive_local()}).unwrap()
+                                    created_at: Local::now().naive_local(),
+                                    event_data: "".to_string(), }).unwrap()
                             },
                             PlayerEvent::TargetLeft(player) => {
                                 sql::insert_session(&connection, &sql::Session { 
@@ -239,15 +310,23 @@ fn main() {
                                     server_id: server.server_id, 
                                     player_id: sql::get_player_by_name(&connection, player.name.clone()).unwrap().player_id, 
                                     event_type: "target leave".to_string(), 
-                                    created_at: Local::now().naive_local()}).unwrap()
+                                    created_at: Local::now().naive_local(),
+                                    event_data: "".to_string(), }).unwrap()
                             },
+                            PlayerEvent::PointUpdate(player, total) => {
+                                sql::insert_player_event(&connection, &sql::PlayerEvent { 
+                                    event_id: 0, 
+                                    server_id: server.server_id, 
+                                    player_id: sql::get_player_by_name(&connection, player.name.clone()).unwrap().player_id, 
+                                    event_type: "point change".to_string(), 
+                                    event_data: total.to_string(), 
+                                    created_at: Local::now().naive_local() }).unwrap();
+                            }
                         }
                     }
                 },
                 Err(_) => continue,
-            }
-
-            
+            }                
         }
 
         println!("{} : {} : Events({}) Players({}) scan({}s) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed).green(), failed.fetch_or(0, Ordering::Relaxed).red()), event_count.fetch_or(0, Ordering::Relaxed).blue(), players_under_my_domain.fetch_or(0, Ordering::Relaxed), scan.elapsed().as_secs(), db.elapsed().as_millis());
@@ -268,6 +347,14 @@ fn generate_player_events(previous_players : &Vec<Player>, current_players : &Ve
             } else {
                 events.push(PlayerEvent::PlayerJoined(player.clone()));
             }
+        }else if !player.name.is_empty() {
+            for prev_player in previous_players{
+                if player.name == prev_player.name{
+                    if player.score != prev_player.score{
+                        events.push(PlayerEvent::PointUpdate(player.clone(), player.score as usize))
+                    }
+                }
+            }
         }
     }
 
@@ -280,7 +367,6 @@ fn generate_player_events(previous_players : &Vec<Player>, current_players : &Ve
             }      
         }
     }
-
     return events;
 }
 
