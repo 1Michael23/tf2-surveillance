@@ -47,6 +47,7 @@ struct Config {
     webhook_image: String,
     refresh_delay: u64,
     database_file: String,
+    targets_file: String,
 }
 
 #[derive(Clone)]
@@ -94,7 +95,7 @@ fn main() {
 
     loop {
         //Load Targets and save to check for updated file.
-        match try_read_lines("target_players.txt"){
+        match try_read_lines(&config.targets_file){
             Some(e) => {
                 if saved_targets != e {
                     saved_targets = e;
@@ -104,7 +105,7 @@ fn main() {
                     }
                 }
             },
-            None => continue,
+            None => {},
         }
 
         let scan = Instant::now();

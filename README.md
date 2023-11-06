@@ -53,6 +53,7 @@ webhook_url = "https://discord.com/api/webhooks/..."
 webhook_image = "http://images.clipartpanda.com/alarm-clipart-1408568727.png"
 refresh_delay = 5
 database_file = "players.db"
+targets_file = "targets.txt"
 ```
 
 ## Dependencies
