@@ -10,7 +10,7 @@ pub struct Server {
     pub address: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ServerSettings {
     pub setting_id: i32,
     pub server_id: i32,
@@ -100,9 +100,9 @@ pub fn insert_server_settings(conn: &Connection, settings: &ServerSettings) -> R
     )
 }
 
-pub fn _get_server_settings(conn: &Connection, server_id: i32) -> Result<ServerSettings> {
+pub fn get_server_settings(conn: &Connection, server_id: i32) -> Result<ServerSettings> {
     conn.query_row(
-        "SELECT * FROM server_settings WHERE server_id = ?1 ORDER BY updated_at DESC LIMIT 1",
+        "SELECT * FROM server_settings WHERE server_id = ?1 ORDER BY created_at DESC LIMIT 1",
         params![server_id],
         |row| {
             Ok(ServerSettings {

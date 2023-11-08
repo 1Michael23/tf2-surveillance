@@ -8,7 +8,7 @@ use rusqlite::Connection;
 
 mod sql;
 
-use chrono::Local;
+use chrono::{Local, NaiveDateTime};
 use a2s::{info::Info, A2SClient};
 use std::{net::SocketAddr, thread::sleep, time::{Duration, Instant}, fs::{self, read_to_string}, collections::HashMap};
 use owo_colors::OwoColorize;
@@ -112,7 +112,6 @@ fn main() {
 
         let sucessful = AtomicUsize::new(0);
         let failed = AtomicUsize::new(0);
-        let event_count = AtomicUsize::new(0);
         let players_under_my_domain = AtomicUsize::new(0);
         
         pool.install(|| {
@@ -170,12 +169,11 @@ fn main() {
                     Ok(players) => {
                         let players = a2s_player_parse(&players);
                         let events = generate_player_events(&previous_players, &players, &saved_targets);
-                        event_count.fetch_add(events.len(), Ordering::Relaxed);
 
                         for event in &events{
                             match event {
                                 PlayerEvent::PlayerJoined(player) =>  if args.monitor {println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Player Joined".yellow(), player.name)},
-                                PlayerEvent::PlayerLeft(player) => if args.monitor {println!("{} : {} : {} , Points: {}, Duration: {:?}", Local::now().format("%H:%M:%S"), "Player Left".blue(), player.name, player.score, Duration::from_secs(player.duration as u64))},
+                                PlayerEvent::PlayerLeft(player) => if args.monitor {println!("{} : {} : {} , Points: {}, Duration: {}", Local::now().format("%H:%M:%S"), "Player Left".blue(), player.name, player.score, format_duration(player.duration as usize))},
                                 PlayerEvent::TargetJoined(player) => {
                                                         println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Target Joined".red(), player.name); 
                                                         if args.report {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Detected in server \n({} : {})", player.name, match current_info.clone() {
@@ -217,9 +215,11 @@ fn main() {
         });
 
         let db = Instant::now();
+        let mut event_count = 0;
 
         for address in target_server_addresses.clone(){
             sql::insert_server(&connection, &sql::Server { server_id: 0, address: address.to_string() }).unwrap();
+            event_count += 1;
         }
 
         for server_events in saved_server_events.read().unwrap().iter(){
@@ -232,9 +232,9 @@ fn main() {
                     ServerEvent::ServerDown(_address) => {
                         sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
                     },
-                    ServerEvent::SettingsChange(_address, info) => {                
-                        sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "setting change".to_string(), event_data: info.map.to_string(), created_at: Local::now().naive_local() }).unwrap();
-                        sql::insert_server_settings(&connection, &sql::ServerSettings { 
+                    ServerEvent::SettingsChange(_address, info) => {
+
+                        let mut new_settings = sql::ServerSettings { 
                             setting_id: 0, 
                             server_id: server_id.server_id, 
                             name: info.name.to_string(), 
@@ -244,16 +244,39 @@ fn main() {
                             has_password: info.visibility, 
                             game_version: info.version.to_string(), 
                             bots: info.bots,
-                            created_at: Local::now().naive_local()
-                         }).unwrap();
+                            created_at: NaiveDateTime::from_timestamp_opt(1, 0).unwrap() //temporary unix time 1;
+                        };
+
+                        //Read from the database to check if settings have changed or just been dropped from memory (program restart)
+                        match sql::get_server_settings(&connection, server_id.server_id){
+                            Ok(mut previous_settings) => {
+                                previous_settings.created_at = NaiveDateTime::from_timestamp_opt(1, 0).unwrap();
+                                previous_settings.setting_id = 0;
+                                if previous_settings != new_settings {
+                                    new_settings.created_at = Local::now().naive_local();
+                                    sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "setting change".to_string(), event_data: info.map.to_string(), created_at: Local::now().naive_local() }).unwrap();
+                                    sql::insert_server_settings(&connection, &new_settings).unwrap();
+                                }
+                            },
+                            Err(e) => {
+                                new_settings.created_at = Local::now().naive_local();
+                                sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "setting change".to_string(), event_data: info.map.to_string(), created_at: Local::now().naive_local() }).unwrap();
+                                sql::insert_server_settings(&connection, &new_settings).unwrap();
+                            },
+                        }
+                        
+
+                       
                     },
                 }
+                event_count += 1;
             }
         }
 
         for server_players in saved_players.read().unwrap().iter(){
             for player in server_players.1{
                 let _ = sql::insert_player(&connection, &sql::Player { player_id: 0, name: player.name.clone()});
+                event_count += 1;
             }
         }
 
@@ -326,13 +349,14 @@ fn main() {
                                     created_at: Local::now().naive_local() }).unwrap();
                             }
                         }
+                        event_count += 1;
                     }
                 },
                 Err(_) => continue,
             }                
         }
 
-        println!("{} : {} : Events({}) Players({}) scan({}s) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed).green(), failed.fetch_or(0, Ordering::Relaxed).red()), event_count.fetch_or(0, Ordering::Relaxed).blue(), players_under_my_domain.fetch_or(0, Ordering::Relaxed), scan.elapsed().as_secs(), db.elapsed().as_millis());
+        println!("{} : {} : Events({}) Players({}) scan({}s) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed).green(), failed.fetch_or(0, Ordering::Relaxed).red()), event_count.blue(), players_under_my_domain.fetch_or(0, Ordering::Relaxed), scan.elapsed().as_secs(), db.elapsed().as_millis());
         sleep(Duration::from_secs(config.refresh_delay));
     };
 }
@@ -372,7 +396,6 @@ fn generate_player_events(previous_players : &Vec<Player>, current_players : &Ve
     }
     return events;
 }
-
 
 fn send_alert(url: String, image: String, input_string: String, title: String, color: u64) {
         let json_request = object! {
