@@ -21,6 +21,7 @@ pub struct ServerSettings {
     pub has_password: bool,
     pub game_version: String,
     pub bots: u8,
+    pub created_at: NaiveDateTime,
 }
 
 #[derive(Debug)]
@@ -84,7 +85,7 @@ pub fn get_server_by_addr(conn: &Connection, address: String) -> Result<Server> 
 
 pub fn insert_server_settings(conn: &Connection, settings: &ServerSettings) -> Result<usize> {
     conn.execute(
-        "INSERT INTO server_settings (server_id, name, max_players, current_map, vac_status, has_password, game_version, bots) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO server_settings (server_id, name, max_players, current_map, vac_status, has_password, game_version, bots, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             settings.server_id,
             &settings.name,
@@ -94,6 +95,7 @@ pub fn insert_server_settings(conn: &Connection, settings: &ServerSettings) -> R
             settings.has_password,
             &settings.game_version,
             settings.bots,
+            settings.created_at.format("%Y-%m-%d %H:%M:%S").to_string()
         ],
     )
 }
@@ -113,6 +115,7 @@ pub fn _get_server_settings(conn: &Connection, server_id: i32) -> Result<ServerS
                 has_password: row.get(6)?,
                 game_version: row.get(7)?,
                 bots: row.get(8)?,
+                created_at: NaiveDateTime::parse_from_str(&row.get::<_, String>(9).unwrap(), "%Y-%m-%d %H:%M:%S").unwrap(),
             })
         },
     )

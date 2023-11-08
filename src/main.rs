@@ -188,7 +188,7 @@ fn main() {
                                                 Some(info) => format!("{} : {}", info.name, info.map),
                                                 None => "Unknown name : Unknown map".to_string(),
                                             }, server.to_string(), player.score, format_duration(player.duration as usize)), "🦀🦀🦀 Runner.".to_string(),22230)}}
-                                PlayerEvent::PointUpdate(Player, total) => {
+                                PlayerEvent::PointUpdate(_player, _total) => {
                                     //do nothing
                                 }
                             };
@@ -226,13 +226,13 @@ fn main() {
             let server_id = sql::get_server_by_addr(&connection, server_events.0.to_string()).unwrap();
             for event in server_events.1{
                 match event {
-                    ServerEvent::ServerUp(address) => {
+                    ServerEvent::ServerUp(_address) => {
                         sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
                     },
-                    ServerEvent::ServerDown(address) => {
+                    ServerEvent::ServerDown(_address) => {
                         sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
                     },
-                    ServerEvent::SettingsChange(address, info) => {                
+                    ServerEvent::SettingsChange(_address, info) => {                
                         sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "setting change".to_string(), event_data: info.map.to_string(), created_at: Local::now().naive_local() }).unwrap();
                         sql::insert_server_settings(&connection, &sql::ServerSettings { 
                             setting_id: 0, 
@@ -243,7 +243,9 @@ fn main() {
                             vac_status: info.vac, 
                             has_password: info.visibility, 
                             game_version: info.version.to_string(), 
-                            bots: info.bots }).unwrap();
+                            bots: info.bots,
+                            created_at: Local::now().naive_local()
+                         }).unwrap();
                     },
                 }
             }

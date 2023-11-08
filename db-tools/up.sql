@@ -12,7 +12,8 @@ CREATE TABLE server_settings (
     vac_status BOOLEAN NOT NULL,
     has_password BOOLEAN NOT NULL,
     game_version TEXT NOT NULL,
-    bots INTEGER NOT NULL
+    bots INTEGER NOT NULL,
+    created_at DATETIME NOT NULL
 );
 
 CREATE TABLE players (
