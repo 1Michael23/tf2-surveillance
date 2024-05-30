@@ -128,7 +128,19 @@ fn map_to_server(row: &Row) -> Server {
     }
 }
 
-pub fn insert_player(conn: &Connection, player: &Player) -> Result<usize> {
+pub fn insert_players_batch(conn: &mut Connection, players: &[Player]) -> Result<usize> {
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare("INSERT OR IGNORE INTO players (name) VALUES (?1) ON CONFLICT (name) DO NOTHING")?;
+        for player in players {
+            stmt.execute(params![&player.name])?;
+        }
+    }
+    tx.commit()?;
+    Ok(players.len())
+}
+
+pub fn _insert_player(conn: &Connection, player: &Player) -> Result<usize> {
     conn.execute(
         "INSERT OR IGNORE INTO players (name) VALUES (?1) ON CONFLICT (name) DO NOTHING",
         params![&player.name],
@@ -147,7 +159,7 @@ pub fn _get_player(conn: &Connection, player_id: i32) -> Result<Player> {
         },
     )
 }
-pub fn get_player_by_name(conn: &Connection, name: String) -> Result<Player> {
+pub fn _get_player_by_name(conn: &Connection, name: String) -> Result<Player> {
     conn.query_row(
         "SELECT * FROM players WHERE name = ?1",
         params![name],
@@ -209,10 +221,25 @@ pub fn _get_server_event(conn: &Connection, event_id: i32) -> Result<ServerEvent
     )
 }
 
-pub fn insert_player_event(conn: &Connection, event: &PlayerEvent) -> Result<()> {
+// pub fn insert_player_event(conn: &Connection, event: &PlayerEvent) -> Result<()> {
+//     conn.execute(
+//         "INSERT INTO player_events (server_id, player_id, event_type, event_data, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+//         params![event.server_id, event.player_id, &event.event_type, event.event_data, event.created_at.format("%Y-%m-%d %H:%M:%S").to_string()],
+//     )?;
+//     Ok(())
+// }
+
+pub fn insert_player_event(conn: &Connection, player_name: &String, event: &PlayerEvent) -> Result<()> {
     conn.execute(
-        "INSERT INTO player_events (server_id, player_id, event_type, event_data, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![event.server_id, event.player_id, &event.event_type, event.event_data, event.created_at.format("%Y-%m-%d %H:%M:%S").to_string()],
+        "INSERT INTO player_events (server_id, player_id, event_type, event_data, created_at)
+        VALUES (?1, (SELECT player_id FROM players WHERE name = ?2), ?3, ?4, ?5)",
+        params![
+            event.server_id,
+            &player_name,
+            &event.event_type,
+            &event.event_data,
+            event.created_at.format("%Y-%m-%d %H:%M:%S").to_string()
+        ],
     )?;
     Ok(())
 }

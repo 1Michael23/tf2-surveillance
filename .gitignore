@@ -15,11 +15,7 @@ Cargo.lock
 
 
 # Added by cargo
-
 /target
-target_players.txt
-plan.md
-*.txt
-config.toml
-players.db
-players.db-journal
+
+/ignore
+.DS_Store
