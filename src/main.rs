@@ -11,7 +11,6 @@ mod sql;
 use chrono::{Local, NaiveDateTime};
 use a2s::{info::Info, A2SClient};
 use std::{collections::HashMap, fs::{self, read_to_string}, net::SocketAddr, thread::sleep, time::{Duration, Instant}};
-use owo_colors::OwoColorize;
 use argh::FromArgs;
 
 use std::sync::{Arc, RwLock, atomic::{Ordering, AtomicUsize}};
@@ -85,8 +84,13 @@ fn main() {
     let args: Arguments = argh::from_env();
     let config = load_config(args.config_file);
 
+
+    let db_file = args.db_file.unwrap_or(config.database_file);
+
     //connect to database specified in config
-    let mut connection = Connection::open(args.db_file.unwrap_or(config.database_file)).unwrap(); 
+    let mut connection = Connection::open(db_file.clone()).unwrap(); 
+
+    println!("opened database at ({})", db_file);
 
     //Allocate space for running memory
     let saved_info: Arc<RwLock<HashMap<SocketAddr, Info>>> = Arc::new(RwLock::new(HashMap::new()));
@@ -108,9 +112,9 @@ fn main() {
             Some(e) => {
                 if saved_target_players != e {
                     saved_target_players = e;
-                    println!("{}", "Loaded Targeted Players:".green());
+                    println!("{}", "Loaded Targeted Players");
                     for name in &saved_target_players{
-                        println!("{}",name)
+                        print!("[{}]",name)
                     }
                 }
             },
@@ -158,7 +162,7 @@ fn main() {
                     Err(error) => {
                         server_events.push(ServerEvent::ServerDown(server.to_string()));
                         if args.verbose {
-                            eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Server Query Failed".red(),server.to_string(), error);    
+                            eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Server Query Failed",server.to_string(), error);    
                         }
                     }
                 }
@@ -181,17 +185,17 @@ fn main() {
 
                         for event in &events{
                             match event {
-                                PlayerEvent::PlayerJoined(player) =>  if args.monitor {println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Player Joined".yellow(), player.name)},
-                                PlayerEvent::PlayerLeft(player) => if args.monitor {println!("{} : {} : {} , Points: {}, Duration: {}", Local::now().format("%H:%M:%S"), "Player Left".blue(), player.name, player.score, format_duration(player.duration as usize))},
+                                PlayerEvent::PlayerJoined(player) =>  if args.monitor {println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Player Joined", player.name)},
+                                PlayerEvent::PlayerLeft(player) => if args.monitor {println!("{} : {} : {} , Points: {}, Duration: {}", Local::now().format("%H:%M:%S"), "Player Left", player.name, player.score, format_duration(player.duration as usize))},
                                 PlayerEvent::TargetJoined(player) => {
-                                    println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Target Joined".red(), player.name);
+                                    println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Target Joined", player.name);
                                     if config.webhook_enabled != 0 {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Detected in server \n({} : {})", player.name, match current_info.clone() {
                                         Some(info) => format!("{} : {}", info.name, info.map),
                                         None => "Unknown name : Unknown map".to_string(),
                                     }, server.to_string()),"🚨🚨🚨 Alert.".to_string(), 16711680)};
                                 },
                                 PlayerEvent::TargetLeft(player) => {
-                                    println!("{} : {} : {} : time: {}", Local::now().format("%H:%M:%S"), "Target Left".red(), player.name, format_duration(player.duration as usize));
+                                    println!("{} : {} : {} : time: {}", Local::now().format("%H:%M:%S"), "Target Left", player.name, format_duration(player.duration as usize));
                                     if config.webhook_enabled != 0 {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Left the server \n({} : {})\nPoints: {}, Duration: {}", player.name, match current_info.clone() {
                                         Some(info) => format!("{} : {}", info.name, info.map),
                                         None => "Unknown name : Unknown map".to_string(),
@@ -215,7 +219,7 @@ fn main() {
                         }
                     },
                     Err(error) => {
-                        if args.verbose {eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Player Query Failed".red(),server.to_string(), error)};
+                        if args.verbose {eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Player Query Failed",server.to_string(), error)};
                         failed.fetch_add(1, Ordering::Relaxed);
                     },
                 }
@@ -302,7 +306,7 @@ fn main() {
                                 }).unwrap();
                             },
                             PlayerEvent::PlayerLeft(player) => {
-                                sql::insert_session(&connection, &sql::Session { 
+                                sql::insert_session(&connection, &player.name,&sql::Session { 
                                     session_id: 0, 
                                     server_id: server.server_id, 
                                     player_id: 0, 
@@ -331,7 +335,7 @@ fn main() {
 
                             },
                             PlayerEvent::TargetLeft(player) => {
-                                sql::insert_session(&connection, &sql::Session { 
+                                sql::insert_session(&connection, &player.name,&sql::Session { 
                                     session_id: 0, 
                                     server_id: server.server_id, 
                                     player_id: 0, 
@@ -367,7 +371,7 @@ fn main() {
             }                
         }
 
-        println!("{} : {} : Events({}) Players({}) scan({}ms) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed).green(), failed.fetch_or(0, Ordering::Relaxed).red()), event_count.blue(), num_players.fetch_or(0, Ordering::Relaxed), scan_time, db_time.elapsed().as_millis());
+        println!("{} : {} : Events({}) Players({}) scan({}ms) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed), failed.fetch_or(0, Ordering::Relaxed)), event_count, num_players.fetch_or(0, Ordering::Relaxed), scan_time, db_time.elapsed().as_millis());
 
         sleep(Duration::from_secs(config.refresh_delay));
     };

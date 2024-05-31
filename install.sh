@@ -4,6 +4,7 @@
 EXEC_PATH=/usr/local/bin/tf2-surveillance
 CONFIG_DIR=/etc/tf2-surveillance
 DB_DIR=/var/lib/tf2-surveillance
+DB_FILE=players.db
 SERVICE_FILE=/etc/systemd/system/tf2-surveillance.service
 
 # Prompt for the username
@@ -23,7 +24,20 @@ sudo mkdir -p $DB_DIR
 
 # Copy Files
 sudo cp config/* $CONFIG_DIR/
-sudo cp db-tools/players-empty.db $DB_DIR/players.db
+
+# Check if the database file exists
+if [ -f "$DB_DIR/$DB_FILE" ]; then
+    read -p "Database file already exists. Do you want to overwrite it? (y/n): " OVERWRITE
+    if [[ "$OVERWRITE" == "y" || "$OVERWRITE" == "Y" ]]; then
+        # Copy database
+        sudo cp /path/to/your/database/file $DB_FILE
+    else
+        echo "Skipping database file overwrite."
+    fi
+else
+    # Copy database
+    sudo cp /path/to/your/database/file $DB_FILE
+fi
 
 # Set permissions
 sudo chown -R $USER_NAME:$USER_NAME $CONFIG_DIR
@@ -47,6 +61,5 @@ Group=$USER_NAME
 WantedBy=multi-user.target" | sudo tee $SERVICE_FILE
 
 sudo systemctl daemon-reload
-systemctl enable tf2-surveillance.service
-systemctl start tf2-surveillance.service
+sudo systemctl enable --now tf2-surveillance.service
 systemctl status tf2-surveillance.service

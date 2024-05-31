@@ -172,10 +172,10 @@ pub fn _get_player_by_name(conn: &Connection, name: String) -> Result<Player> {
     )
 }
 
-pub fn insert_session(conn: &Connection, session: &Session) -> Result<usize> {
+pub fn insert_session(conn: &Connection, name: &String,session: &Session) -> Result<usize> {
     conn.execute(
-        "INSERT INTO sessions (server_id, player_id, score, duration, joined_at, left_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![session.server_id, session.player_id, session.score, session.duration, session.joined_at.format("%Y-%m-%d %H:%M:%S").to_string(), session.left_at.format("%Y-%m-%d %H:%M:%S").to_string()]
+        "INSERT INTO sessions (server_id, player_id, score, duration, joined_at, left_at) VALUES (?1, (SELECT player_id FROM players WHERE name = ?2), ?3, ?4, ?5, ?6)",
+        params![session.server_id, name, session.score, session.duration, session.joined_at.format("%Y-%m-%d %H:%M:%S").to_string(), session.left_at.format("%Y-%m-%d %H:%M:%S").to_string()]
     )
 }
 
