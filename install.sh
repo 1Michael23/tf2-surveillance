@@ -22,26 +22,41 @@ sudo chmod +x $EXEC_PATH
 sudo mkdir -p $CONFIG_DIR
 sudo mkdir -p $DB_DIR
 
-# Copy Files
-sudo cp config/* $CONFIG_DIR/
+# Check if the database file exists
+if [ -f "$CONFIG_DIR/config.toml" ]; then
+    read -p "Config file already exists. Do you want to overwrite it? (y/n): " OVERWRITE_CONFIG
+    if [[ "$OVERWRITE_CONFIG" == "y" || "$OVERWRITE_CONFIG" == "Y" ]]; then
+        # Copy config
+        sudo cp config/config.toml $CONFIG_DIR/config.toml
+    else
+        echo "Skipping config overwrite."
+    fi
+else
+    # Copy config
+    sudo cp config/config.toml $CONFIG_DIR/config.toml
+fi
 
 # Check if the database file exists
 if [ -f "$DB_DIR/$DB_FILE" ]; then
-    read -p "Database file already exists. Do you want to overwrite it? (y/n): " OVERWRITE
-    if [[ "$OVERWRITE" == "y" || "$OVERWRITE" == "Y" ]]; then
+    read -p "Database file already exists. Do you want to overwrite it? (y/n): " OVERWRITE_DB
+    if [[ "$OVERWRITE_DB" == "y" || "$OVERWRITE_DB" == "Y" ]]; then
         # Copy database
-        sudo cp /path/to/your/database/file $DB_FILE
+        sudo cp db-tools/players-empty.db $DB_DIR/$DB_FILE
     else
         echo "Skipping database file overwrite."
     fi
 else
     # Copy database
-    sudo cp /path/to/your/database/file $DB_FILE
+    sudo cp db-tools/players-empty.db $DB_DIR/$DB_FILE
 fi
 
 # Set permissions
 sudo chown -R $USER_NAME:$USER_NAME $CONFIG_DIR
 sudo chown -R $USER_NAME:$USER_NAME $DB_DIR
+
+# Remove existing service file
+
+sudo rm $SERVICE_FILE
 
 # Create the systemd service file
 echo "[Unit]
