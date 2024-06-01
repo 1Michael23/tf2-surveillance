@@ -1,7 +1,9 @@
-webhook_enabled = 0
+webhook_enabled = false
 webhook_url = "https://discord.com/api/webhooks/..."
 webhook_image = "http://images.clipartpanda.com/alarm-clipart-1408568727.png"
 refresh_delay = 5
+heartbeat_enabled = false
+heartbeat_url = "Your Url Here"
 database_file = "/var/lib/tf2-surveillance/players.db"
 server_file = "/etc/tf2-surveillance/target_servers.txt" #requires program restart to reload
 target_file = "/etc/tf2-surveillance/target_players.txt" #does not require restart to reload

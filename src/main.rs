@@ -16,6 +16,10 @@ use argh::FromArgs;
 use std::sync::{Arc, RwLock, atomic::{Ordering, AtomicUsize}};
 use rayon::{prelude::*, ThreadPoolBuilder};
 
+//If using heartbeat with uptimekuma, this will append the tf2 scan total latency at the end of the request
+//If using heartbeat with a service other than uptimekuma change to false.
+const UPTIMEKUMA_PING: bool = true;
+
 #[macro_use]
 extern crate json;
 
@@ -47,10 +51,12 @@ extern crate serde_derive;
 
 #[derive(Debug, Deserialize)]
 struct Config {
-    webhook_enabled: u32,
+    webhook_enabled: bool,
     webhook_url: String,
     webhook_image: String,
     refresh_delay: u64,
+    heartbeat_enabled: bool,
+    heartbeat_url: String,
     database_file: String,
     server_file: String,
     target_file: String,
@@ -84,13 +90,12 @@ fn main() {
     let args: Arguments = argh::from_env();
     let config = load_config(args.config_file);
 
-
     let db_file = args.db_file.unwrap_or(config.database_file);
 
     //connect to database specified in config
     let mut connection = Connection::open(db_file.clone()).unwrap(); 
 
-    println!("opened database at ({})", db_file);
+    println!("Opened database at ({})", db_file);
 
     //Allocate space for running memory
     let saved_info: Arc<RwLock<HashMap<SocketAddr, Info>>> = Arc::new(RwLock::new(HashMap::new()));
@@ -112,10 +117,7 @@ fn main() {
             Some(e) => {
                 if saved_target_players != e {
                     saved_target_players = e;
-                    println!("{}", "Loaded Targeted Players");
-                    for name in &saved_target_players{
-                        print!("[{}]",name)
-                    }
+                    println!("Loaded ({}) target players", saved_target_players.len());
                 }
             },
             None => {},
@@ -161,9 +163,7 @@ fn main() {
                     },
                     Err(error) => {
                         server_events.push(ServerEvent::ServerDown(server.to_string()));
-                        if args.verbose {
-                            eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Server Query Failed",server.to_string(), error);    
-                        }
+                        eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Server Query Failed",server.to_string(), error);    
                     }
                 }
 
@@ -189,14 +189,14 @@ fn main() {
                                 PlayerEvent::PlayerLeft(player) => if args.monitor {println!("{} : {} : {} , Points: {}, Duration: {}", Local::now().format("%H:%M:%S"), "Player Left", player.name, player.score, format_duration(player.duration as usize))},
                                 PlayerEvent::TargetJoined(player) => {
                                     println!("{} : {} : {}", Local::now().format("%H:%M:%S"), "Target Joined", player.name);
-                                    if config.webhook_enabled != 0 {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Detected in server \n({} : {})", player.name, match current_info.clone() {
+                                    if config.webhook_enabled {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Detected in server \n({} : {})", player.name, match current_info.clone() {
                                         Some(info) => format!("{} : {}", info.name, info.map),
                                         None => "Unknown name : Unknown map".to_string(),
                                     }, server.to_string()),"🚨🚨🚨 Alert.".to_string(), 16711680)};
                                 },
                                 PlayerEvent::TargetLeft(player) => {
                                     println!("{} : {} : {} : time: {}", Local::now().format("%H:%M:%S"), "Target Left", player.name, format_duration(player.duration as usize));
-                                    if config.webhook_enabled != 0 {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Left the server \n({} : {})\nPoints: {}, Duration: {}", player.name, match current_info.clone() {
+                                    if config.webhook_enabled {send_alert(config.webhook_url.clone(), config.webhook_image.clone(), format!("__**{}**__ Left the server \n({} : {})\nPoints: {}, Duration: {}", player.name, match current_info.clone() {
                                         Some(info) => format!("{} : {}", info.name, info.map),
                                         None => "Unknown name : Unknown map".to_string(),
                                     }, server.to_string(), player.score, format_duration(player.duration as usize)), "🦀🦀🦀 Runner.".to_string(),22230)}
@@ -219,7 +219,7 @@ fn main() {
                         }
                     },
                     Err(error) => {
-                        if args.verbose {eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Player Query Failed",server.to_string(), error)};
+                        eprintln!("{} : {} : {} : {}",Local::now().format("%H:%M:%S"), "Player Query Failed",server.to_string(), error);
                         failed.fetch_add(1, Ordering::Relaxed);
                     },
                 }
@@ -243,7 +243,7 @@ fn main() {
                         sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
                     },
                     ServerEvent::ServerDown(_address) => {
-                        sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "up".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
+                        sql::insert_server_event(&connection, &sql::ServerEvent { event_id: 0, server_id: server_id.server_id, event_type: "down".to_string(), event_data: "".to_string(), created_at: Local::now().naive_local() }).unwrap();
                     },
                     ServerEvent::Settings(_address, info) => {
 
@@ -371,6 +371,8 @@ fn main() {
             }                
         }
 
+        if config.heartbeat_enabled {send_heartbeat(config.heartbeat_url.clone() + scan_time.to_string().as_str());}
+
         println!("{} : {} : Events({}) Players({}) scan({}ms) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed), failed.fetch_or(0, Ordering::Relaxed)), event_count, num_players.fetch_or(0, Ordering::Relaxed), scan_time, db_time.elapsed().as_millis());
 
         sleep(Duration::from_secs(config.refresh_delay));
@@ -433,6 +435,10 @@ fn send_alert(url: String, image: String, input_string: String, title: String, c
         .set("Content-Type", "application/json")
         .send(json.as_bytes())
         .expect("Failed to post to webhook");
+}
+
+fn send_heartbeat(url: String) {
+    let _ = ureq::get(&url).call();
 }
 
 fn try_read_lines(filename: &str) -> Option<Vec<String>> {
