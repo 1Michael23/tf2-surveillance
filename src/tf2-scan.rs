@@ -10,7 +10,7 @@ mod sql;
 
 use chrono::{Local, NaiveDateTime};
 use a2s::{info::Info, A2SClient};
-use std::{collections::HashMap, fs::{self, read_to_string}, net::SocketAddr, thread::sleep, time::{Duration, Instant}};
+use std::{collections::HashMap, fs::{self, read_to_string}, net::SocketAddr, process::exit, thread::sleep, time::{Duration, Instant}};
 use argh::FromArgs;
 
 use std::sync::{Arc, RwLock, atomic::{Ordering, AtomicUsize}};
@@ -93,9 +93,10 @@ fn main() {
     let db_file = args.db_file.unwrap_or(config.database_file);
 
     //connect to database specified in config
-    let mut connection = Connection::open(db_file.clone()).unwrap(); 
-
-    println!("Opened database at ({})", db_file);
+    let mut connection = match Connection::open(db_file.clone()){
+        Ok(connection) => {println!("Opened database at ({})", db_file); connection},
+        Err(e) => {eprintln!("Failed to establish database connection ({:?})",e);exit(1)},
+    };
 
     //Allocate space for running memory
     let saved_info: Arc<RwLock<HashMap<SocketAddr, Info>>> = Arc::new(RwLock::new(HashMap::new()));
@@ -371,9 +372,13 @@ fn main() {
             }                
         }
 
-        if config.heartbeat_enabled {send_heartbeat(config.heartbeat_url.clone() + scan_time.to_string().as_str());}
-
         println!("{} : {} : Events({}) Players({}) scan({}ms) db({}ms)",Local::now().format("%H:%M:%S"), format!("Scanned ({}:{}:{})", target_server_addresses.len(), sucessful.fetch_or(0, Ordering::Relaxed), failed.fetch_or(0, Ordering::Relaxed)), event_count, num_players.fetch_or(0, Ordering::Relaxed), scan_time, db_time.elapsed().as_millis());
+
+        let ping_param: String = match UPTIMEKUMA_PING {
+            true => scan_time.to_string(),
+            false => "".to_string(),
+        };
+        if config.heartbeat_enabled {send_heartbeat(config.heartbeat_url.clone() + &ping_param)}
 
         sleep(Duration::from_secs(config.refresh_delay));
     };
@@ -438,7 +443,11 @@ fn send_alert(url: String, image: String, input_string: String, title: String, c
 }
 
 fn send_heartbeat(url: String) {
-    let _ = ureq::get(&url).call();
+    let call = ureq::get(&url).call();
+    match call {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to send heartbeat ({})", e),
+    }
 }
 
 fn try_read_lines(filename: &str) -> Option<Vec<String>> {
@@ -448,7 +457,7 @@ fn try_read_lines(filename: &str) -> Option<Vec<String>> {
     } 
 }
 
-fn format_duration(input: usize) -> String{661;
+fn format_duration(input: usize) -> String{
     let hours = input / 3600;
     let minutes = (input % 3600) / 60;
     let seconds = input % 60;

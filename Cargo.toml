@@ -5,6 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "tf2-scan"
+path = "src/tf2-scan.rs"
+
+[[bin]]
+name = "tf2-analysis"
+path = "src/tf2-analysis.rs"
+
 [dependencies]
 a2s = "0.5.2"
 argh = "0.1.12"

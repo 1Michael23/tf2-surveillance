@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Set variables
-EXEC_PATH=/usr/local/bin/tf2-surveillance
+SCAN_EXEC_PATH=/usr/local/bin/tf2-scan
+ANALYSIS_EXEC_PATH=/usr/local/bin/tf2-analysis
 CONFIG_DIR=/etc/tf2-surveillance
 DB_DIR=/var/lib/tf2-surveillance
 DB_FILE=players.db
@@ -12,11 +13,16 @@ read -p "Enter the username for running the service (default: $(whoami)): " USER
 USER_NAME=${USER_NAME:-$(whoami)}
 
 # Build Project
-cargo build --release
+cargo build --release 
+
+# Remove old binary
+sudo rm $SCAN_EXEC_PATH
 
 # Copy Binaries
-sudo cp target/release/tf2-surveillance $EXEC_PATH
-sudo chmod +x $EXEC_PATH
+sudo cp target/release/tf2-scan $SCAN_EXEC_PATH
+sudo cp target/release/tf2-analysis $ANALYSIS_EXEC_PATH
+sudo chmod +x $SCAN_EXEC_PATH
+sudo chmod +x $ANALYSIS_EXEC_PATH
 
 # Create directories
 sudo mkdir -p $CONFIG_DIR
@@ -64,7 +70,7 @@ Description=TF2-Surveillance
 After=network.target
 
 [Service]
-ExecStart=$EXEC_PATH -c $CONFIG_DIR/config.toml
+ExecStart=$SCAN_EXEC_PATH -c $CONFIG_DIR/config.toml
 Restart=always
 StandardOutput=syslog
 StandardError=syslog
