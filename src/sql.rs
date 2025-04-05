@@ -4,6 +4,7 @@ extern crate chrono;
 use rusqlite::{params, Connection, Result, Row};
 use chrono::NaiveDateTime;
 
+
 #[derive(Debug)]
 pub struct Server {
     pub server_id: i32,
@@ -67,7 +68,7 @@ pub fn insert_server(conn: &Connection, server: &Server) -> Result<usize> {
     )
 }
 
-pub fn _get_server(conn: &Connection, server_id: i32) -> Result<Server> {
+pub fn get_server(conn: &Connection, server_id: i32) -> Result<Server> {
     conn.query_row(
         "SELECT * FROM servers WHERE server_id = ?1",
         params![server_id],
@@ -140,14 +141,14 @@ pub fn insert_players_batch(conn: &mut Connection, players: &[Player]) -> Result
     Ok(players.len())
 }
 
-pub fn _insert_player(conn: &Connection, player: &Player) -> Result<usize> {
+pub fn insert_player(conn: &Connection, player: &Player) -> Result<usize> {
     conn.execute(
         "INSERT OR IGNORE INTO players (name) VALUES (?1) ON CONFLICT (name) DO NOTHING",
         params![&player.name],
     )
 }
 
-pub fn _get_player(conn: &Connection, player_id: i32) -> Result<Player> {
+pub fn get_player(conn: &Connection, player_id: i32) -> Result<Player> {
     conn.query_row(
         "SELECT * FROM players WHERE player_id = ?1",
         params![player_id],
@@ -159,7 +160,7 @@ pub fn _get_player(conn: &Connection, player_id: i32) -> Result<Player> {
         },
     )
 }
-pub fn _get_player_by_name(conn: &Connection, name: String) -> Result<Player> {
+pub fn get_player_by_name(conn: &Connection, name: String) -> Result<Player> {
     conn.query_row(
         "SELECT * FROM players WHERE name = ?1",
         params![name],
@@ -179,7 +180,7 @@ pub fn insert_session(conn: &Connection, name: &String,session: &Session) -> Res
     )
 }
 
-pub fn _get_session(conn: &Connection, session_id: i32) -> Result<Session> {
+pub fn get_session(conn: &Connection, session_id: i32) -> Result<Session> {
     conn.query_row(
         "SELECT * FROM sessions WHERE session_id = ?1",
         params![session_id],
@@ -197,6 +198,34 @@ pub fn _get_session(conn: &Connection, session_id: i32) -> Result<Session> {
     )
 }
 
+pub fn get_all_sessions(conn: &Connection) -> Result<Vec<Session>> {
+    let mut stmt = conn.prepare("SELECT * FROM sessions")?;
+    let mut rows = stmt.query([])?; // no parameters
+
+    let mut sessions = Vec::new();
+
+    while let Some(row) = rows.next()? {
+        let session = Session {
+            session_id: row.get(0)?,
+            server_id: row.get(1)?,
+            player_id: row.get(2)?,
+            score: row.get(3)?,
+            duration: row.get(4)?,
+            joined_at: NaiveDateTime::parse_from_str(
+                &row.get::<_, String>(5)?,
+                "%Y-%m-%d %H:%M:%S"
+            ).unwrap(),
+            left_at: NaiveDateTime::parse_from_str(
+                &row.get::<_, String>(6)?,
+                "%Y-%m-%d %H:%M:%S"
+            ).unwrap(),
+        };
+        sessions.push(session);
+    }
+
+    Ok(sessions)
+}
+
 pub fn insert_server_event(conn: &Connection, event: &ServerEvent) -> Result<()> {
     conn.execute(
         "INSERT INTO server_events (server_id, event_type, event_data, created_at) VALUES (?1, ?2, ?3, ?4)",
@@ -205,7 +234,7 @@ pub fn insert_server_event(conn: &Connection, event: &ServerEvent) -> Result<()>
     Ok(())
 }
 
-pub fn _get_server_event(conn: &Connection, event_id: i32) -> Result<ServerEvent> {
+pub fn get_server_event(conn: &Connection, event_id: i32) -> Result<ServerEvent> {
     conn.query_row(
         "SELECT * FROM server_events WHERE event_id = ?1",
         params![event_id],
@@ -219,6 +248,29 @@ pub fn _get_server_event(conn: &Connection, event_id: i32) -> Result<ServerEvent
             })
         },
     )
+}
+
+pub fn get_all_server_events(conn: &Connection) -> Result<Vec<ServerEvent>>{
+    let mut stmt = conn.prepare("SELECT * FROM server_events")?;
+    let mut rows = stmt.query([])?;
+
+    let mut server_events = Vec::new();
+
+    while let Some(row) = rows.next()?{
+        let server_event = ServerEvent{
+            event_id: row.get(0)?,
+            server_id: row.get(1)?,
+            event_type: row.get(2)?,
+            event_data: row.get(3)?,
+            created_at: NaiveDateTime::parse_from_str(
+                &row.get::<_, String>(4)?, 
+                "%Y-%m-%d %H:%M:%S"
+            ).unwrap(),
+        };
+        server_events.push(server_event);
+    }
+
+    return Ok(server_events);
 }
 
 // pub fn insert_player_event(conn: &Connection, event: &PlayerEvent) -> Result<()> {

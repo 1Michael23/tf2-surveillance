@@ -1,18 +1,10 @@
-extern crate a2s;
-extern crate chrono;
-extern crate serde;
-extern crate toml;
-extern crate rusqlite;
-
-use rusqlite::Connection;
-
 mod sql;
 
+use rusqlite::Connection;
 use chrono::{Local, NaiveDateTime};
 use a2s::{info::Info, A2SClient};
 use std::{collections::HashMap, fs::{self, read_to_string}, net::SocketAddr, process::exit, thread::sleep, time::{Duration, Instant}};
 use argh::FromArgs;
-
 use std::sync::{Arc, RwLock, atomic::{Ordering, AtomicUsize}};
 use rayon::{prelude::*, ThreadPoolBuilder};
 
@@ -38,9 +30,6 @@ struct Arguments {
     ///target players path
     #[argh(option, short = 'p')]
     target_file: Option<String>,
-    ///displays extra information
-    #[argh(switch, short = 'v')]
-    verbose: bool,
     ///print all leave/join events
     #[argh(switch, short = 'm')]
     monitor: bool,    
