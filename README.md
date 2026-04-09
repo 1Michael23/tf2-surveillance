@@ -2,6 +2,8 @@
 
 An advanced data logging software to track players across Source game servers and collect statistics.
 
+##### Unfortunately due to the death of uncletopia servers in my country i will not be contunuing the development of this tool. as it does not work on valve casual servers.
+
 # Features
 
 - Multithreaded scanning.
@@ -55,6 +57,13 @@ This is the jupyter notebook where the database is read and analysied, this is o
 Some modules are included, these need slight modification such as inputting a target file
 
 Some also depend on data loaded by a previous module
+
+##### Correlated player example
+
+In this example (top right) three players almost simultaniously switch from one server to another. with enough occurrences these paterns can guarentee certain players are in a team or friends. and to track players real life paterns.
+
+![Graph displaying players movements between servers](/figures/correlated.png)
+
 
 ## Configuration
 

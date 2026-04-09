@@ -30,9 +30,16 @@ fn main() {
     let start = Instant::now();
 
     let mut sessions = sql::get_all_sessions(&connection).unwrap();
-    println!("({}ms) Sessions: {}", start.elapsed().as_millis(), sessions.len());
+    println!("({:?}) Sessions: {}", start.elapsed(), sessions.len());
     let mut server_events = sql::get_all_server_events(&connection).unwrap();
-    println!("({}ms) Server Events: {}", start.elapsed().as_millis(), server_events.len());
+    println!("({:?}) Server Events: {}", start.elapsed(), server_events.len());
+    let mut player_events = sql::get_all_player_events(&connection).unwrap();
+    println!("({:?}) Player Events: {}", start.elapsed(), player_events.len());
 
+    println!("{:?}", sessions.get(sessions.len()-1).unwrap());
+
+    loop {
+        
+    }
 
 }

@@ -312,3 +312,23 @@ pub fn _get_player_event(conn: &Connection, event_id: i32) -> Result<PlayerEvent
         },
     )
 }
+
+pub fn get_all_player_events(conn: &Connection) -> Result<Vec<PlayerEvent>>{
+    let mut stmt = conn.prepare("SELECT * FROM player_events")?;
+    let mut rows = stmt.query([])?;
+
+    let mut player_events = Vec::new();
+
+    while let Some(row) = rows.next()?{
+        let player_event = PlayerEvent{
+            event_id: row.get(0)?,
+            server_id: row.get(1)?,
+            player_id: row.get(2)?,
+            event_type: row.get(3)?,
+            event_data: row.get(4)?,
+            created_at: NaiveDateTime::parse_from_str(&row.get::<_, String>(5).unwrap(), "%Y-%m-%d %H:%M:%S").unwrap(),
+        };
+        player_events.push(player_event);
+    }
+    return Ok(player_events);
+}

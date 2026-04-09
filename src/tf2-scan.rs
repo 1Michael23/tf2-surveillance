@@ -87,16 +87,20 @@ fn main() {
         Err(e) => {eprintln!("Failed to establish database connection ({:?})",e);exit(1)},
     };
 
+    let mut target_server_addresses: Vec<SocketAddr> = Vec::new();
+
     //Allocate space for running memory
     let saved_info: Arc<RwLock<HashMap<SocketAddr, Info>>> = Arc::new(RwLock::new(HashMap::new()));
     let saved_players = Arc::new(RwLock::new(HashMap::new()));
     let saved_player_events_by_server = Arc::new(RwLock::new(HashMap::new()));
     let saved_server_events: Arc<RwLock<HashMap<SocketAddr, Vec<ServerEvent>>>> = Arc::new(RwLock::new(HashMap::new()));
     let mut saved_target_players : Vec<String> = Vec::new();
-    let target_server_addresses : Vec<SocketAddr> = try_read_lines(&args.server_file.unwrap_or(config.server_file.clone()))
+    let mut custom_server_addresses : Vec<SocketAddr> = try_read_lines(&args.server_file.unwrap_or(config.server_file.clone()))
         .expect("Failed to read target server file").iter()
         .filter_map(|address| address.parse().ok())
         .collect();
+
+    target_server_addresses.append(&mut custom_server_addresses);
 
     //Allocate thread pool
     let pool = ThreadPoolBuilder::new().num_threads(200).build().unwrap();
