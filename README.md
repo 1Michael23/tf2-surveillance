@@ -15,6 +15,7 @@ An advanced data logging software to track players across Source game servers an
 
 The steam server API that this program uses only provides two datapoints for each player, their current **name**, **score**, and **duration** on the server.
 For this reason it can not:
+- **Cannot scan valve casual servers as they are now behind the Steam Datagram Relay**
 - Distinguish multiple players with the same name
 - Track players across name changes
 - Associate players with Steam ID
